@@ -6,7 +6,10 @@
 # 00000 Nome1
 # 00000 Nome2
 
-import sys
+#import sys
+from sys import stdin
+import numpy as np
+
 from search import (
     Problem,
     Node,
@@ -16,6 +19,25 @@ from search import (
     greedy_search,
     recursive_best_first_search,
 )
+
+#constantes
+is_water = lambda x: x == "W" or x == "."
+is_circle = lambda x: x.lower() == "c"
+is_top = lambda x: x.lower() == "t"
+is_middle = lambda x: x.lower() == "m"
+is_bottom = lambda x: x.lower() == "b"
+is_left = lambda x: x.lower() == "l"
+is_right = lambda x: x.lower() == "r"
+is_empty = lambda x: x == "|"
+
+WATER = "."
+CIRCLE = "c"
+TOP = "t"
+MIDDLE = "m"
+BOTTOM = "b"
+LEFT = "l"
+RIGHT = "r"
+EMPTY = "|"
 
 
 class BimaruState:
@@ -33,40 +55,133 @@ class BimaruState:
 
 
 class Board:
-    """Representação interna de um tabuleiro de Bimaru."""
+    def __init__(self, hints, rows_target, cols_target) -> None: 
+        self.state = np.full((10,10), EMPTY)
+        self.hints = hints
+        self.rows_target = rows_target
+        self.cols_target = cols_target
 
-    def get_value(self, row: int, col: int) -> str:
+        #build the board
+        self.build()
+
+    def build(self):
+        #place the hints in the board
+        for hint in self.hints:
+            row, col, object = hint
+
+            #place
+            self.place(row, col, object)
+        
+    """Representação interna de um tabuleiro de Bimaru."""
+    def get_value(self, row: int, col: int) -> str | None:
         """Devolve o valor na respetiva posição do tabuleiro."""
-        # TODO
-        pass
+        if 0 <= row < 10 and 0 <= col < 10:
+            return self.state[row, col]
+
+        return None
 
     def adjacent_vertical_values(self, row: int, col: int) -> (str, str):
         """Devolve os valores imediatamente acima e abaixo,
         respectivamente."""
-        # TODO
-        pass
+        v1 = self.get_value(row, col-1)
+        v2 = self.get_value(row, col+1)
 
+        return (v1, v2) 
+    
     def adjacent_horizontal_values(self, row: int, col: int) -> (str, str):
         """Devolve os valores imediatamente à esquerda e à direita,
         respectivamente."""
-        # TODO
-        pass
+        h1 = self.get_value(row-1, col)
+        h2 = self.get_value(row+1, col)
 
+        return (h1, h2)
+
+    def decrease_count(self, row, col):
+        self.rows_target[row]-= 1
+        self.cols_target[col]-= 1
+
+        if self.rows_target[row] == 0:
+          self.clean_row(row)
+
+        if self.cols_target[col] == 0:
+          self.clean_col(col)
+
+    def place(self, row, col, obj):
+        row, col = int(row), int(col)
+        cur_value = self.get_value(row, col)
+
+        #TODO: check if we are not placing adjacent to another object
+        if not is_empty(cur_value):
+            raise ValueError(f"Place is {cur_value} at ({row},{col})")
+ 
+        if is_water(obj):
+            self.state[row,col] = obj
+            return 
+        
+        #clean object surroundings
+        adjustments = []
+        if is_circle(obj):
+            adjustments = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+        elif is_top(obj):
+            adjustments = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 1)]
+
+        elif is_bottom(obj):
+            adjustments = [(-1, -1), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+        #TODO: if is middle is one block away from a border that block is not water (object)
+        elif is_middle(obj):
+            adjustments = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+
+        elif is_left(obj):
+            adjustments = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (1, -1), (1, 0), (1, 1)]
+
+        elif is_right(obj):
+            adjustments = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+        for adjust_row, adjust_col in adjustments:
+            new_row, new_col = row + adjust_row, col + adjust_col
+
+            # Check if values are less than 0
+            if not (0 <= new_row < 10 and 0 <= new_col < 10):
+                continue
+            
+            # check if we are not overriding a value
+            if is_empty(self.get_value(new_row, new_col)):
+              self.place(new_row, new_col, WATER)
+
+        #place the object in the board 
+        self.state[row,col] = obj
+
+        #decrease the count of the target and clean 0 target row/cols
+        self.decrease_count(row, col)
+
+    def clean_row(self, row):
+      for col in range(10):
+        if is_empty(self.get_value(row, col)):
+          self.place(row, col, WATER)
+    
+    def clean_col(self, col):
+        for row in range(10):
+            if is_empty(self.get_value(row, col)):
+              self.place(row, col, WATER)
+    
     @staticmethod
     def parse_instance():
         """Lê o test do standard input (stdin) que é passado como argumento
         e retorna uma instância da classe Board.
-
-        Por exemplo:
-            $ python3 bimaru.py < input_T01
-
-            > from sys import stdin
-            > line = stdin.readline().split()
         """
-        # TODO
-        pass
+        rows_target = np.fromiter(map(int, stdin.readline().split()[1:]), dtype=int)
+        cols_target = np.fromiter(map(int, stdin.readline().split()[1:]), dtype=int)
+        hints = np.empty((0, 3), dtype=object)
 
-    # TODO: outros metodos da classe
+        for _ in range(int(stdin.readline())):
+            r, c, value = stdin.readline().split()[1:]
+            hint_row = np.array([[r, c, value]], dtype=str)
+            hints = np.append(hints, hint_row, axis=0)   
+
+        return Board(hints, rows_target, cols_target)
+
 
 
 class Bimaru(Problem):
@@ -110,4 +225,10 @@ if __name__ == "__main__":
     # Usar uma técnica de procura para resolver a instância,
     # Retirar a solução a partir do nó resultante,
     # Imprimir para o standard output no formato indicado.
-    pass
+    init_board = Board.parse_instance()
+    with open("t.out", "w") as f:
+      board = init_board.state
+      for row in range(10):
+        for col in range(10):
+          f.write(f"{board[row,col]} ")
+        f.write("\n")
