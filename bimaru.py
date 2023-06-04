@@ -9,6 +9,7 @@
 #import sys
 from sys import stdin
 import numpy as np
+import copy
 
 from search import (
     Problem,
@@ -35,16 +36,18 @@ EMPTY = ""
 PLACEHOLDER = "o"
 
 #aux
-is_water = lambda x: x == DEFAULT_WATER or x == WATER
-is_circle = lambda x: x.lower() == CIRCLE
-is_top = lambda x: x.lower() == TOP
-is_middle = lambda x: x.lower() == MIDDLE
-is_bottom = lambda x: x.lower() == BOTTOM
+is_water = lambda x: x and x == DEFAULT_WATER or x == WATER
+is_circle = lambda x: x and x.lower() == CIRCLE
+is_top = lambda x: x and x.lower() == TOP
+is_middle = lambda x: x and x.lower() == MIDDLE
+is_bottom = lambda x: x and x.lower() == BOTTOM
 is_left = lambda x: x.lower() == LEFT
 is_right = lambda x: x.lower() == RIGHT
 is_empty = lambda x: x == EMPTY
 is_border = lambda x: x == None
 is_placeholder = lambda x: x == PLACEHOLDER
+
+is_piece = lambda x: not (is_water(x) or is_border(x) or is_empty(x))
 
 
 class BimaruState:
@@ -58,7 +61,7 @@ class BimaruState:
   def __lt__(self, other):
     return self.id < other.id
 
-class Board:
+class Board:  
   def clean_board(self):
     #predicts
     while True:
@@ -76,13 +79,14 @@ class Board:
           self.updated = False
           stop = False
 
+        #apply deductions
         for drow, dcol, dobj in deductions:
-          #place the deduction
           self.place(drow, dcol, dobj)
 
       if stop: #break out of the while True
         break
 
+    #when the board is clean we can resolve the boats
     self.resolve_boats()
       
   def place(self, row, col, obj):
@@ -222,41 +226,32 @@ class Board:
       if is_empty(self.get_value(row, col)):
         self.place(row, col, WATER)
         self.updated = True
-  
 
   def subtract_targets(self, row, col):
     self.rows_target[row]-= 1
     self.cols_target[col]-= 1
 
   def apply_targets(self):
-    #TODO: analize the following complexity
-    
-    
     for row_index, target in enumerate(self.rows_target):
       if target == 0:
         self.clean_row(row_index)
+      else:
+        empty_spaces = self.empty_row_spaces(row_index)
+        n_spaces = len(empty_spaces)
+        if n_spaces and n_spaces == target:
+          for col in empty_spaces:
+            self.place(row_index, col, PLACEHOLDER)
 
-    #apply for zero cols
     for col_index, target in enumerate(self.cols_target):
       if target == 0:
         self.clean_col(col_index)
-
-    #apply for non zero rows
-    for row_index, target in enumerate(self.rows_target):
-      empty_spaces = self.empty_row_spaces(row_index)
-      n_spaces = len(empty_spaces)
-      if n_spaces and n_spaces == target:
-        for col in empty_spaces:
-          self.place(row_index, col, PLACEHOLDER)
-
-    #apply for non zero values  
-    for col_index, target in enumerate(self.cols_target):
-      empty_spaces = self.empty_col_spaces(col_index)
-      n_spaces = len(empty_spaces)
-      if n_spaces and n_spaces == target:
-        for row in empty_spaces:
-          self.place(row, col_index, PLACEHOLDER)
-
+      else:
+        empty_spaces = self.empty_col_spaces(col_index)
+        n_spaces = len(empty_spaces)
+        if n_spaces and n_spaces == target:
+          for row in empty_spaces:
+            self.place(row, col_index, PLACEHOLDER)
+        
   def empty_row_spaces(self, row):
     spaces = []
     for col in range(BOARD_SIZE):
@@ -285,116 +280,290 @@ class Board:
     #relative distance to the closest piece
     top_rd, left_rd, right_rd, bottom_rd = self.distance_to_piece(row, col)
 
-    if is_right(obj):
-      deductions.append((row, col-1, PLACEHOLDER))
+    if is_right(obj): 
+      if left_rd == 2:
+        #M x x R
+        if not is_left(self.get_value(row, col-3)):
+          deductions.append((row, col-1, LEFT))
+        #L x x R
+        else:
+          deductions.append((row, col-1, MIDDLE))
+          deductions.append((row, col-2, MIDDLE))
+          deductions.append((row, col-3, LEFT))
+      #| x R
+      elif left_d == 1:
+        deductions.append((row, col-1, LEFT))
+      else:
+        deductions.append((row, col-1, PLACEHOLDER))
 
     elif is_left(obj):
-      deductions.append((row, col+1, PLACEHOLDER))
+      if right_rd == 2:
+        #L x x M
+        if not is_right(self.get_value(row, col+3)):
+          deductions.append((row, col+1, RIGHT))
+        #L x x R
+        else:
+          deductions.append((row, col+1, MIDDLE))
+          deductions.append((row, col+2, MIDDLE))
+          deductions.append((row, col+3, RIGHT))
+      # L x |
+      elif right_d == 1:
+        deductions.append((row, col+1, RIGHT))
+      else:
+        deductions.append((row, col+1, PLACEHOLDER))
 
     elif is_bottom(obj):
-      deductions.append((row-1, col, PLACEHOLDER))
-    
-    elif is_top(obj):
-      deductions.append((row+1, col, PLACEHOLDER))
+      if top_rd == 2:
+        #M x x B
+        if not is_top(self.get_value(row-3, col)):
+          deductions.append((row-1, col, TOP))
+        #T x x B 
+        else:
+          deductions.append((row-1, col, MIDDLE))
+          deductions.append((row-2, col, MIDDLE))
+          deductions.append((row-3, col, TOP))
+      #| x B
+      elif top_d == 1:
+        deductions.append((row-1, col, TOP))
+      else:
+        deductions.append((row-1, col, PLACEHOLDER))
 
-      # if self.rows_target[row+1] - 1 == 0: #-1 is the ""placeholder""
-      #   self.clean_row(row+1, [col])
+    elif is_top(obj):
+      if bottom_rd == 2:
+        #T x x M
+        if not is_bottom(self.get_value(row+3, col)):
+          deductions.append((row+1, col, BOTTOM))
+        #T x x B
+        else:
+          deductions.append((row+1, col, MIDDLE))
+          deductions.append((row+2, col, MIDDLE))
+          deductions.append((row+3, col, BOTTOM))
+      #T x |
+      elif bottom_d == 1:
+        deductions.append((row+1, col, BOTTOM))
+      else:
+        deductions.append((row+1, col, PLACEHOLDER))
     
     elif is_middle(obj):
       #middle block is on top/bottom rows and is 1 block to the wall
-      if top_d == 0 or bottom_d == 0:
-        deductions.append((row, col-1, PLACEHOLDER))
-        deductions.append((row, col+1, PLACEHOLDER))
+      if top_d == 0 or bottom_d == 0 or is_water(top_obj) or is_water(bottom_obj):
+        if left_d == 1 or is_water(self.get_value(row, col-2)):
+          deductions.append((row, col-1, LEFT))
+        else:
+          deductions.append((row, col-1, PLACEHOLDER))
+
+        if right_d == 1 or is_water(self.get_value(row, col+2)):
+          deductions.append((row, col+1, RIGHT))
+        else:
+          deductions.append((row, col+1, PLACEHOLDER))
 
       #middle block is on left/right columns and is 1 block away from top/bottom
-      elif left_d == 0 or right_d == 0:
-        deductions.append((row-1, col, PLACEHOLDER))
-        deductions.append((row+1, col, PLACEHOLDER))
+      elif left_d == 0 or right_d == 0 or is_water(left_obj) or is_water(right_obj):
+        if top_d == 1 or is_water(self.get_value(row-2, col)):
+          deductions.append((row-1, col, TOP))
+        else:
+          deductions.append((row-1, col, PLACEHOLDER))
 
-      #middle block has non-empty pieces in the left/right side
-      elif not ((is_empty(left_obj) or is_placeholder(left_obj)) and (is_empty(right_obj) or is_placeholder(right_obj))):
-        deductions.append((row-1, col, PLACEHOLDER))
-        deductions.append((row+1, col, PLACEHOLDER))
-
-      #middle block has non-empty pieces in the top/bottom side
-      elif not ((is_empty(top_obj) or is_placeholder(top_obj)) and (is_empty(bottom_obj) or is_placeholder(bottom_obj))):
-        deductions.append((row, col-1, PLACEHOLDER))
-        deductions.append((row, col+1, PLACEHOLDER))
-
-      #relative distance deductions
-      if left_rd == 1 and not is_empty(top_obj) and not is_empty(bottom_obj):
-        deductions.append((row, col-1, PLACEHOLDER))
-
-      if right_rd == 1 and not is_empty(top_obj) and not is_empty(bottom_obj):
-        deductions.append((row, col+1, PLACEHOLDER))
-
-      if top_rd == 1 and not is_empty(left_obj) and not is_empty(right_obj):
-        deductions.append((row-1, col, PLACEHOLDER))
-
-      if bottom_rd == 1 and not is_empty(left_obj) and not is_empty(right_obj):
-        deductions.append((row+1, col, PLACEHOLDER))
+        if bottom_d == 1 or is_water(self.get_value(row+2, col)):
+          deductions.append((row+1, col, BOTTOM))
+        else:
+          deductions.append((row+1, col, PLACEHOLDER))
 
     #filter deductions
     filtered_deductions = [d for d in deductions if is_empty(self.get_value(d[0], d[1]))]
     return filtered_deductions
 
+  def can_be_circle(self, row, col):
+    obj = self.get_value(row, col)
+
+    #if it's already a circle piece
+    if is_circle(obj):
+      return True
+
+    if not (is_empty(obj) or is_placeholder(obj)):
+      return False
+
+    offsets = [(1,0), (-1, 0), (0,-1), (0,1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+    for r, c in offsets:
+      n_row, n_col = row + r , col + c
+      if is_piece(self.get_value(n_row, n_col)):
+        return False
+
+    return True
+
+  def can_be_bottom(self, row, col):
+    obj = self.get_value(row, col)
+    
+    #if it's already a bottom piece
+    if is_bottom(obj):
+      return True
+
+    if not (is_empty(obj) or is_placeholder(obj)):
+      return False
+
+    #bottom, bottom-left, bottom-right, left, right, top-left, top-right
+    offsets = [(1,0), (1, -1), (1, 1), (0, -1), (0, 1), (-1, -1), (-1, 1)]
+
+    for r, c in offsets:
+      n_row, n_col = row + r , col + c
+      if is_piece(self.get_value(n_row, n_col)):
+        return False
+
+    return True
+  
+  def can_be_top(self, row, col):
+    obj = self.get_value(row, col)
+
+    #if it's already a top piece
+    if is_top(obj):
+      return True
+
+    if not (is_empty(obj) or is_placeholder(obj)):
+      return False
+
+    #top, top-left, top-right, left, right, bottom-left, bottom-right
+    offsets = [(-1,0), (-1, -1), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 1)]
+
+    for r, c in offsets:
+      n_row, n_col = row + r , col + c
+      if is_piece(self.get_value(n_row, n_col)):
+        return False
+      
+    return True
+  
+  def can_be_left(self, row, col):
+    obj = self.get_value(row, col)
+
+    #if it's already a left piece
+    if is_left(obj):
+      return True
+
+    if not (is_empty(obj) or is_placeholder(obj)):
+      return False
+
+    #left, top-left, bottom-left, top, bottom, top-right, bottom-right
+    offsets = [(0,-1), (-1, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (1, 1)]
+
+    for r, c in offsets:
+      n_row, n_col = row + r , col + c
+      if is_piece(self.get_value(n_row, n_col)):
+        return False
+      
+    return True
+  
+  def can_be_right(self, row, col):
+    obj = self.get_value(row, col)
+
+    #if it's already a right piece
+    if is_right(obj):
+      return True
+
+    if not (is_empty(obj) or is_placeholder(obj)):
+      return False
+
+    #right, top-right, bottom-right, top, bottom, top-left, bottom-left
+    offsets = [(0,1), (-1, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (1, -1)]
+
+    for r, c in offsets:
+      n_row, n_col = row + r , col + c
+      if is_piece(self.get_value(n_row, n_col)):
+        return False
+      
+    return True
+  
+  def can_be_middle(self, row, col):
+    obj = self.get_value(row, col)
+
+    #if it's already a middle piece
+    if is_middle(obj):
+      return True
+    
+    if not (is_empty(obj) or is_placeholder(obj)):
+      return False
+    
+    #top-left, top-right, bottom-left, bottom-right
+    offsets = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+
+    for r, c in offsets:
+      n_row, n_col = row + r , col + c
+      if is_piece(self.get_value(n_row, n_col)):
+        return False
+      
+    return True
+
+  def validate_boat(self, row, col, boat_size, direction):
+    valid = True
+
+    if boat_size == 0:
+      return False
+
+    #confirmation edge cases
+    if boat_size == 1:
+      valid = self.can_be_circle(row, col)
+
+    if boat_size == 2:
+      if direction == "bottom":
+        valid = self.can_be_top(row, col) and self.can_be_bottom(row+1,col)
+
+      elif direction == "right":
+        valid = self.can_be_left(row, col) and self.can_be_right(row, col+1)
+
+    if boat_size == 3:
+      if direction == "bottom":
+        valid = self.can_be_top(row, col) and self.can_be_middle(row+1,col) and self.can_be_bottom(row+2,col)
+
+      if direction == "right":
+        valid = self.can_be_left(row, col) and self.can_be_middle(row, col +1) and self.can_be_right(row, col+2)
+
+    if boat_size == 4:
+      if direction == "bottom":
+        valid = self.can_be_top(row, col) and self.can_be_middle(row+1,col) and self.can_be_middle(row+2,col) and self.can_be_bottom(row+3,col)
+
+      if direction == "right":
+        valid = self.can_be_left(row, col) and self.can_be_middle(row, col+1) and self.can_be_middle(row, col+2) and self.can_be_right(row, col+3)
+      
+    #check validity based on targets
+    empty_blocks = 0
+    for i in range(boat_size):
+      if direction == "bottom":
+        boat_piece = self.get_value(row+i, col)
+        if is_empty(boat_piece):
+          if self.rows_target[row+i] == 0 or self.cols_target[col] == empty_blocks:
+            valid = False
+            break
+          empty_blocks += 1
+
+      elif direction == "right":
+        boat_piece = self.get_value(row, col+i)
+        if is_empty(boat_piece):
+          if self.rows_target[row] == 0 or self.cols_target[col+i] == 0:
+            valid = False
+            break
+          empty_blocks += 1
+
+    return valid
 
   def resolve_boats(self):
-    """
-    This function find boats in the board and resolve them
-    Either just removing them from the left_boats or also replacing placeholders
-    """
-    skip = []
+    found_boats = self.search_boats()
 
-    for row in range(self.state.shape[0]):
-      for col in range(self.state.shape[1]):
-        #skip
-        if (row, col) in skip:
-          continue
-        
-        #get the current max size boat we are looking for
-        if len(self.left_boats) == 0:
-          return
-        
-        #get max size boat
-        max_size_boat = max(self.left_boats)
-
-        #search boat to the right and to the bottom
-        boat_direction = "right"
-        boat_size = 0
-        confirmed = False
-        has_placeholder = False
-
-        #we will search a boat 
-        for search_direction in ["right", "bottom"]:
-          size_search, confirmation_search, search_has_placeholder = self.search_boat(row, col, search_direction, max_size_boat)
-          if size_search > boat_size:
-            boat_size = size_search
-            confirmed = confirmation_search
-            boat_direction = search_direction
-            has_placeholder = search_has_placeholder
-
-        #place the boat
-        if boat_size and confirmed:
-          # print(self)
-          # print(f"Boat found at {row}, {col} with size {boat_size} and direction {boat_direction}")
-          # print(f"Left boats: {self.left_boats}")
-
-          #if there is placeholders in the boat, resolve them
-          if has_placeholder:
-            self.place_boat(row, col, boat_size, boat_direction)
-
-          #remove the boat size from the list of left boats
-          self.left_boats = np.delete(self.left_boats, np.where(self.left_boats == boat_size)[0][0])
-
-        #mark the board cords as visited
-        for i in range(boat_size+1): #+1 because it's the margin where we can't place boats
-          if boat_direction == "right":
-            skip.append((row, col+i))
-          elif boat_direction == "bottom":
-            skip.append((row+i, col))         
+    for boat in found_boats:
+      row, col, size, direction, empty_blocks, placeholder_blocks = boat
+      
+      if empty_blocks == 0 and placeholder_blocks != 0: #is an already confirmed boat
+        self.place_boat(row, col, size, direction)
 
   def place_boat(self, row, col, size, direction):
+    #remove boat size from boats_left
+    if size not in self.left_boats:
+      return
+    
+    # print(self)
+    # print(f"Placing boat of size {size} at {row}, {col}, direction: {direction}")
+
+    self.left_boats = np.delete(self.left_boats, np.where(self.left_boats == size)[0][0])
+
+
     if size == 1:
       self.place(row, col, CIRCLE)
     
@@ -428,60 +597,70 @@ class Board:
         self.place(row+2, col, MIDDLE)
         self.place(row+3, col, BOTTOM)
 
-  def search_boat(self, row, col, direction, max_boat_size=4):
-    """
-    returns boat: [row, col, size], confirmed_boat or false
-    """
-
-    confirmed = True
-    has_placeholder = False
-    boat_size = 0
-
-    #vertical search
-    if direction == "bottom":
-      while boat_size < max_boat_size:
-        sp = self.get_value(row+boat_size, col)
-        if is_water(sp) or is_border(sp):  
-          break
-        elif is_empty(sp):
-          confirmed = False
-        elif is_placeholder(sp):
-          has_placeholder = True
-        boat_size += 1
-        
-
-    #horizontal search
-    elif direction == "right":
-      while boat_size < max_boat_size:
-        sp = self.get_value(row, col+boat_size)
-        if is_water(sp) or is_border(sp): 
-          break
-        elif is_empty(sp):
-          confirmed = False
-        elif is_placeholder(sp):
-          has_placeholder = True
-        boat_size += 1
-
-
-    #get surrounding of the search position
-    vv = self.adjacent_vertical_values(row, col)
-    hv = self.adjacent_horizontal_values(row, col)
-
-    #confirmation edge cases
-    if boat_size == 1:
-      if not (is_water(vv[0]) or is_border(vv[0])) or not (is_water(vv[1]) or is_border(vv[1]))\
-          or not (is_water(hv[0]) or is_border(hv[0])) or not (is_water(hv[1]) or is_border(hv[1])):
-        confirmed = False
-
-    # if direction == "bottom" and boat_size != 4 and is_empty(vv[0]):
-    #   confirmed = False
+  def search_boats(self):
+    if len(self.left_boats) == 0:
+      return []
     
-    # if direction == "right" and boat_size != 4 and is_empty(hv[0]):
-    #   confirmed = False
+    skip = []
+    boats = []
+    max_boat_size = self.left_boats[0]
 
+    for row in range(BOARD_SIZE):
+      for col in range(BOARD_SIZE):
+        #skip visited positions
+        if (row, col) in skip:
+          continue
+          
+        local_boats = []
+        for direction in ["right", "bottom"]: 
+          boat_size = 0
+          empty_blocks = 0
+          placeholder_blocks = 0
 
+          while boat_size < max_boat_size:
+            if direction == "right":
+              new_col = col + boat_size
+              new_row = row
+            elif direction == "bottom":
+              new_col = col
+              new_row = row + boat_size
+            
+            #break case
+            sp = self.get_value(new_row, new_col)
+            if is_water(sp) or is_border(sp):  
+              break
+            
+            #counting
+            elif is_empty(sp):
+              empty_blocks += 1
+            elif is_placeholder(sp):
+              placeholder_blocks += 1
+            
+            boat_size += 1
+
+          valid = self.validate_boat(row, col, boat_size, direction)
+          
+          if valid:
+            local_boats.append([row, col, boat_size, direction, empty_blocks, placeholder_blocks])
+          else:
+            print(f"Invalid boat at {row}, {col}, size: {boat_size}, direction: {direction}")
+
+        #if there isnt any boat in the current position, skip
+        if len(local_boats) == 0:
+          continue
+
+        #get the biggest boat
+        biggest_boat = max(local_boats, key=lambda x: x[2]) 
+        boats.append(biggest_boat)
+
+        #add the rows/cols to the skip
+        for i in range(biggest_boat[2]+1): #+1 because it's the margin where we can't place boats
+          if biggest_boat[3] == "right":
+            skip.append((row, col+i))
+          elif biggest_boat[3] == "bottom":
+            skip.append((row+i, col))
     
-    return boat_size, confirmed, has_placeholder
+    return boats
 
 
   def __str__(self):
@@ -508,6 +687,17 @@ class Board:
 
     return matrix_str
 
+  def board_copy(self):
+    """Retorna uma cópia do tabuleiro atual."""
+    board_copy = Board()
+    board_copy.rows_target = self.rows_target.copy()
+    board_copy.cols_target = self.cols_target.copy()
+    board_copy.state = copy.deepcopy(self.state)
+    board_copy.boat_pieces = self.boat_pieces.copy()
+    board_copy.left_boats = self.left_boats.copy()
+    board_copy.updated = self.updated
+    return board_copy
+  
   @staticmethod
   def parse_instance():
     """Lê o test do standard input (stdin) que é passado como argumento
@@ -535,22 +725,55 @@ class Bimaru(Problem):
       super().__init__(BimaruState(board))
 
     def actions(self, state: BimaruState):
-      """Retorna uma lista de ações que podem ser executadas a
-      partir do estado passado como argumento."""
-      return []
+      if len(state.board.left_boats) == 0:
+        return []
+      
+      max_boat_size = state.board.left_boats[0]
+      found_boats = state.board.search_boats()
+
+      actions = []
+      for boat in found_boats:
+        _, _, boat_size, _, empty_blocks, placeholder_blocks = boat
+
+        #ignore small boats
+        if boat_size != max_boat_size :
+          continue
+
+        #if the boat is already placed, ignore it
+        if empty_blocks == 0 and placeholder_blocks == 0:
+          continue
+
+        actions.append(boat)
+
+      #sort actions based on the amount of placeholders
+      actions.sort(key=lambda x: x[5], reverse=True)
+      print(state.board)
+      print(f"left boats: {state.board.left_boats}")
+      print("actions: ", actions)
+      return actions
+      
+
 
     def result(self, state: BimaruState, action):
-      """Retorna o estado resultante de executar a 'action' sobre
-      'state' passado como argumento. A ação a executar deve ser uma
-      das presentes na lista obtida pela execução de
-      self.actions(state)."""
-      # TODO
-      pass
+      new_board = state.board.board_copy()
+
+      # print(f"{state.state_id} -> {action}")
+      row, col, boat_size, direction, _, _ = action
+      new_board.place_boat(row, col, boat_size, direction)
+      new_board.clean_board()
+
+      # print("result")
+      # print(new_board)
+
+      new_state = BimaruState(new_board)
+      return new_state
+
 
     def goal_test(self, state: BimaruState):
+      # print("testing goal")
       for row in state.board.state:
-        for col in row:
-          if col == EMPTY:
+        for pos in row:
+          if pos == EMPTY or pos == PLACEHOLDER:
             return False
       
       #?????
@@ -576,18 +799,40 @@ class Bimaru(Problem):
 if __name__ == "__main__":
   
   board = Board.parse_instance()
+  print("Initial board:")
+  print(board)
+  
   board.clean_board()
+  
 
   problem = Bimaru(board)
+
+  # Criar um estado com a configuração inicial:
+  # s0 = BimaruState(board)
+  # Aplicar as ações que resolvem a instância
+
+  # print("S0")
+  # print(s0.board)
+  # print(problem.actions(s0))
+
+  # print("S1")
+  # s1 = problem.result(s0, problem.actions(s0)[0])
+  # print(s1.board)
+  # print(problem.actions(s1))
+
+  # print("S2")
+  # s2 = problem.result(s1, problem.actions(s1)[0])
+  # print(s2.board)
+
 
   goal_node: Node = depth_first_tree_search(problem)
 
   if goal_node:
-    for row in goal_node.state.board.state:
-      for col in row:
-        print(col, end="")
-      print()
-    # print(goal_node.state.board)
+    print(goal_node.state.board)
+    # for row in goal_node.state.board.state:
+    #   for col in row:
+    #     print(col, end="")
+    #   print()
   
   # for row in board.state:
   #   for col in row:
