@@ -43,6 +43,8 @@ is_bottom = lambda x: x.lower() == BOTTOM
 is_left = lambda x: x.lower() == LEFT
 is_right = lambda x: x.lower() == RIGHT
 is_empty = lambda x: x == EMPTY
+is_boat_piece = lambda x: is_bottom(x) or is_circle(x) or is_left(x) or is_middle(x) or is_right(x) or is_top(x) or is_placeholder(x)
+is_border = lambda x: x == None
 is_placeholder = lambda x: x == PLACEHOLDER
 
 
@@ -58,22 +60,12 @@ class BimaruState:
     return self.id < other.id
 
 class Board:
-  a = {4: []}
-  def empty_pieces_row_col():
-    pass
-
-  def possible_placements():
-    pass
-
-
   def clean_board(self):
     #predicts
-    x = 0
     while True:
       stop = True
-      print(f"ITER {x}\n")
+
       #clean non empty rows/cols
-      print(f"CLEAN NON EMPTY ROWS/COLS")
       self.apply_targets()
 
       for piece in self.boat_pieces:
@@ -88,22 +80,22 @@ class Board:
         for drow, dcol, dobj in deductions:
           #place the deduction
           self.place(drow, dcol, dobj)
-      
-      x+= 1
-      print(self)
 
       if stop: #break out of the while True
         break
+
+    self.resolve_boats()
       
   def place(self, row, col, obj):
     row, col = int(row), int(col)
+    current_obj = self.get_value(row, col)
 
     # if values are not in the board boundary
     if not (0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE):
       return
 
     # if we are overwriting something
-    elif not is_empty(self.get_value(row, col)) and not obj == DEFAULT_WATER:
+    elif not is_empty(current_obj) and not obj == DEFAULT_WATER and not is_placeholder(current_obj):
       return
 
     #place the object
@@ -113,14 +105,17 @@ class Board:
       return
 
     #save the piece
+    if is_placeholder(obj):
+      #remove the old piece from the pieces list
+      self.boat_pieces = np.delete(self.boat_pieces, np.where((self.boat_pieces == [row, col, current_obj]).all(axis=1)), axis=0)
+      
+    #add the placed piece to the pieces list
     self.boat_pieces = np.append(self.boat_pieces, [[row, col, obj]], axis=0)
 
     #subtract targets
-    self.subtract_targets(row, col)
-
-    #clean surroundings
-    self.clean_surroundings(row, col, obj)
-
+    if is_empty(current_obj):
+      self.subtract_targets(row, col)
+      self.clean_surroundings(row, col, obj)
 
   def clean_surroundings(self, row, col, obj):
     #clean object surroundings
@@ -146,8 +141,9 @@ class Board:
 
     for adjust_row, adjust_col in surroundings:
       new_row, new_col = row + adjust_row, col + adjust_col
-      self.place(new_row, new_col, WATER)
 
+      if is_empty(self.get_value(new_row, new_col)):
+        self.place(new_row, new_col, WATER)
 
   def get_value(self, row: int, col: int) -> str | None:
     """Devolve o valor na respetiva posição do tabuleiro."""
@@ -180,7 +176,6 @@ class Board:
     return (row, col, BOARD_SIZE-1-col , BOARD_SIZE-1-row)
 
 
-  #TODO: ADVANCED TARGET CHECK AND CLEAN
   def clean_row(self, row):
     for col in range(BOARD_SIZE):
       if is_empty(self.get_value(row, col)):
@@ -292,71 +287,136 @@ class Board:
     return filtered_deductions
 
 
-  def is_boat(self, row: str, col: str):
+  def resolve_boats(self):
+    """
+    This function find boats in the board and resolve them
+    Either just removing them from the left_boats or also replacing placeholders
+    """
+    skip = []
 
-    row, col = int(row), int(col)
-    cur_val = self.get_value(row, col)
+    for row in range(self.state.shape[0]):
+      for col in range(self.state.shape[1]):
+        #skip
+        if (row, col) in skip:
+          continue
+        
+        #get the current max size boat we are looking for
+        if len(self.left_boats) == 0:
+          return
+        
+        #get max size boat
+        max_size_boat = max(self.left_boats)
 
-    if is_circle(cur_val):
-      return True
+        #search boat to the right and to the bottom
+        boat_direction = "right"
+        boat_size = 0
+        confirmed = False
+        has_placeholder = False
 
-    elif is_top(cur_val):
-      m1 = is_middle(self.get_value(row+1, col))
-      m2 = is_middle(self.get_value(row+2, col))
-      b1 = is_bottom(self.get_value(row+1, col))
-      b2 = is_bottom(self.get_value(row+2, col))
-      b3 = is_bottom(self.get_value(row+3, col))
+        #we will search a boat 
+        for search_direction in ["right", "bottom"]:
+          size_search, confirmation_search, search_has_placeholder = self.search_boat(row, col, search_direction, max_size_boat)
+          if size_search > boat_size:
+            boat_size = size_search
+            confirmed = confirmation_search
+            boat_direction = search_direction
+            has_placeholder = search_has_placeholder
 
-      if b1:
-        return True
-      elif m1 and b2:
-        return True
-      elif m1 and m2 and b3:
-        return True
+        #place the boat
+        if confirmed:
+          #if there is placeholders in the boat, resolve them
+          if has_placeholder:
+            self.place_boat(row, col, boat_size, boat_direction)
 
-    elif is_bottom(cur_val):
-      m1 = is_middle(self.get_value(row-1, col))
-      m2 = is_middle(self.get_value(row-2, col))
-      t1 = is_top(self.get_value(row-1, col))
-      t2 = is_top(self.get_value(row-2, col))
-      t3 = is_top(self.get_value(row-3, col))
+          #remove the boat size from the list of left boats
+          self.left_boats = np.delete(self.left_boats, np.where(self.left_boats == boat_size)[0][0])
+          
+          #mark the board cords as visited
+          for i in range(boat_size):
+            if boat_direction == "right":
+              skip.append((row, col+i))
+            elif boat_direction == "bottom":
+              skip.append((row+i, col))         
 
-      if t1:
-        return True
-      elif m1 and t2:
-        return True
-      elif m1 and m2 and t3:
-        return True
-    #L X X M
-    elif is_left(cur_val):
-      m1 = is_middle(self.get_value(row, col+1))
-      m2 = is_middle(self.get_value(row, col+2))
-      r1 = is_right(self.get_value(row, col+1))
-      r2 = is_right(self.get_value(row, col+2))
-      r3 = is_right(self.get_value(row, col+3))
+  def place_boat(self, row, col, size, direction):
+    if size == 1:
+      self.place(row, col, CIRCLE)
+    
+    elif size == 2:
+      if direction == "right":
+        self.place(row, col, LEFT)
+        self.place(row, col+1, RIGHT)
+      elif direction == "bottom":
+        self.place(row, col, TOP)
+        self.place(row+1, col, BOTTOM)
+    
+    elif size == 3:
+      if direction == "right":
+        self.place(row, col, LEFT)
+        self.place(row, col+1, MIDDLE)
+        self.place(row, col+2, RIGHT)
+      elif direction == "bottom":
+        self.place(row, col, TOP)
+        self.place(row+1, col, MIDDLE)
+        self.place(row+2, col, BOTTOM)
 
-      if r1:
-        return True
-      elif m1 and r2:
-        return True
-      elif m1 and m2 and r3:
-        return True
+    elif size == 4:
+      if direction == "right":
+        self.place(row, col, LEFT)
+        self.place(row, col+1, MIDDLE)
+        self.place(row, col+2, MIDDLE)
+        self.place(row, col+3, RIGHT)
+      elif direction == "bottom":
+        self.place(row, col, TOP)
+        self.place(row+1, col, MIDDLE)
+        self.place(row+2, col, MIDDLE)
+        self.place(row+3, col, BOTTOM)
 
-    elif is_right(cur_val):
-      m1 = is_middle(self.get_value(row, col-1))
-      m2 = is_middle(self.get_value(row, col-2))
-      l1 = is_left(self.get_value(row, col-1))
-      l2 = is_left(self.get_value(row, col-2))
-      l3 = is_left(self.get_value(row, col-3))
+  def search_boat(self, row, col, direction, max_boat_size=4):
+    """
+    returns boat: [row, col, size], confirmed_boat or false
+    """
 
-      if l1:
-        return True
-      elif m1 and l2:
-        return True
-      elif m1 and m2 and l3:
-        return True
+    confirmed = True
+    has_placeholder = False
+    boat_size = 0
 
-    return False
+    #vertical search
+    if direction == "bottom":
+      while boat_size < max_boat_size:
+        sp = self.get_value(row+boat_size, col)
+        if is_water(sp) or is_border(sp):  
+          break
+        elif is_empty(sp):
+          confirmed = False
+        elif is_placeholder(sp):
+          has_placeholder = True
+        boat_size += 1
+        
+
+    #horizontal search
+    elif direction == "right":
+      while boat_size < max_boat_size:
+        sp = self.get_value(row, col+boat_size)
+        if is_water(sp) or is_border(sp): 
+          break
+        elif is_empty(sp):
+          confirmed = False
+        elif is_placeholder(sp):
+          has_placeholder = True
+        boat_size += 1
+
+    #update confirmation on edge case
+    if boat_size == 1:
+      #get surrounding of the search position
+      vv = self.adjacent_vertical_values(row, col)
+      hv = self.adjacent_horizontal_values(row, col)
+
+      if not (is_water(vv[0]) or is_border(vv[0])) or not (is_water(vv[1]) or is_border(vv[1]))\
+          or not (is_water(hv[0]) or is_border(hv[0])) or not (is_water(hv[1]) or is_border(hv[1])):
+        confirmed = False
+
+    return boat_size, confirmed, has_placeholder
 
 
   def __str__(self):
@@ -393,66 +453,75 @@ class Board:
     board_instance.cols_target = np.fromiter(map(int, stdin.readline().split()[1:]), dtype=int)
     board_instance.state = np.full((BOARD_SIZE,BOARD_SIZE), EMPTY)
     board_instance.boat_pieces = np.empty((0, 3), dtype=object)
+    board_instance.left_boats = np.fromiter([4, 3, 3, 2, 2, 2, 1, 1, 1, 1], dtype=int)
     board_instance.updated = False
 
-    print(board_instance.rows_target)
-
+    #build the initial board
     for _ in range(int(stdin.readline())):
       row, col, obj = stdin.readline().split()[1:]
       board_instance.place(int(row), int(col), obj)
-
-      #TODO: calculate what piece is a boat and add them to open_pieces
 
     return board_instance
 
 
 class Bimaru(Problem):
     def __init__(self, board: Board):
-        """O construtor especifica o estado inicial."""
-        pass
+      """O construtor especifica o estado inicial."""
+      super().__init__(BimaruState(board))
 
     def actions(self, state: BimaruState):
-        """Retorna uma lista de ações que podem ser executadas a
-        partir do estado passado como argumento."""
-        # TODO
-        pass
+      """Retorna uma lista de ações que podem ser executadas a
+      partir do estado passado como argumento."""
+      return []
 
     def result(self, state: BimaruState, action):
-        """Retorna o estado resultante de executar a 'action' sobre
-        'state' passado como argumento. A ação a executar deve ser uma
-        das presentes na lista obtida pela execução de
-        self.actions(state)."""
-        # TODO
-        pass
+      """Retorna o estado resultante de executar a 'action' sobre
+      'state' passado como argumento. A ação a executar deve ser uma
+      das presentes na lista obtida pela execução de
+      self.actions(state)."""
+      # TODO
+      pass
 
     def goal_test(self, state: BimaruState):
-        """Retorna True se e só se o estado passado como argumento é
-        um estado objetivo. Deve verificar se todas as posições do tabuleiro
-        estão preenchidas de acordo com as regras do problema."""
-        # TODO
-        pass
+      for row in state.board.state:
+        for col in row:
+          if col == EMPTY:
+            return False
+      
+      #?????
+      for row in state.board.rows_target:
+        if row != 0:
+          return False
+      
+      #?????
+      for col in state.board.cols_target:
+        if col != 0:
+          return False
+
+      return True
 
     def h(self, node: Node):
-        """Função heuristica utilizada para a procura A*."""
-        # TODO
-        pass
+      """Função heuristica utilizada para a procura A*."""
+      # TODO
+      pass
 
     # TODO: outros metodos da classe
 
 
 if __name__ == "__main__":
-    # TODO:
-    # Ler o ficheiro do standard input,
-    # Usar uma técnica de procura para resolver a instância,
-    # Retirar a solução a partir do nó resultante,
-    # Imprimir para o standard output no formato indicado.
-    board = Board.parse_instance()
-    print(board)
-    board.clean_board()
+  
+  board = Board.parse_instance()
+  board.clean_board()
 
-    with open("t.out", "w") as f:
-      board = board.state
-      for row in range(BOARD_SIZE):
-        for col in range(BOARD_SIZE):
-          f.write(f"{board[row,col]} ")
-        f.write("\n")
+  problem = Bimaru(board)
+
+  goal_node: Node = depth_first_tree_search(problem)
+
+  if goal_node:
+    print("SOLVED")
+    print(goal_node.state.board)
+  
+  # for row in board.state:
+  #   for col in row:
+  #     print(col, end="")
+  #   print()
