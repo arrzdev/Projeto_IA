@@ -43,7 +43,6 @@ is_bottom = lambda x: x.lower() == BOTTOM
 is_left = lambda x: x.lower() == LEFT
 is_right = lambda x: x.lower() == RIGHT
 is_empty = lambda x: x == EMPTY
-is_boat_piece = lambda x: is_bottom(x) or is_circle(x) or is_left(x) or is_middle(x) or is_right(x) or is_top(x) or is_placeholder(x)
 is_border = lambda x: x == None
 is_placeholder = lambda x: x == PLACEHOLDER
 
@@ -175,6 +174,42 @@ class Board:
     '''
     return (row, col, BOARD_SIZE-1-col , BOARD_SIZE-1-row)
 
+  def distance_to_piece(self, row, col):
+    '''
+    returns the distance to closest non-empty piece
+    (top, left, right, bottom)
+    '''
+    #find to the left
+    topd = 0
+    leftd = 0
+    rightd = 0
+    bottomd = 0
+
+    #count top distance
+    for i in range(row-1, -1, -1):
+      if not is_empty(self.get_value(i, col)):
+        break
+      topd+= 1
+
+    #count left distance
+    for i in range(col-1, -1, -1):
+      if not is_empty(self.get_value(row, i)):
+        break
+      leftd+= 1
+
+    #count right distance
+    for i in range(col+1, BOARD_SIZE):
+      if not is_empty(self.get_value(row, i)):
+        break
+      rightd+= 1
+
+    #count bottom distance
+    for i in range(row+1, BOARD_SIZE):
+      if not is_empty(self.get_value(i, col)):
+        break
+      bottomd+= 1
+    
+    return (topd, leftd, rightd, bottomd)
 
   def clean_row(self, row):
     for col in range(BOARD_SIZE):
@@ -247,6 +282,9 @@ class Board:
     left_obj, right_obj = self.adjacent_horizontal_values(row, col)
     top_obj, bottom_obj = self.adjacent_vertical_values(row, col)
 
+    #relative distance to the closest piece
+    top_rd, left_rd, right_rd, bottom_rd = self.distance_to_piece(row, col)
+
     if is_right(obj):
       deductions.append((row, col-1, PLACEHOLDER))
 
@@ -282,6 +320,20 @@ class Board:
       elif not ((is_empty(top_obj) or is_placeholder(top_obj)) and (is_empty(bottom_obj) or is_placeholder(bottom_obj))):
         deductions.append((row, col-1, PLACEHOLDER))
         deductions.append((row, col+1, PLACEHOLDER))
+
+      #relative distance deductions
+      if left_rd == 1 and not is_empty(top_obj) and not is_empty(bottom_obj):
+        deductions.append((row, col-1, PLACEHOLDER))
+
+      if right_rd == 1 and not is_empty(top_obj) and not is_empty(bottom_obj):
+        deductions.append((row, col+1, PLACEHOLDER))
+
+      if top_rd == 1 and not is_empty(left_obj) and not is_empty(right_obj):
+        deductions.append((row-1, col, PLACEHOLDER))
+
+      if bottom_rd == 1 and not is_empty(left_obj) and not is_empty(right_obj):
+        deductions.append((row+1, col, PLACEHOLDER))
+
     #filter deductions
     filtered_deductions = [d for d in deductions if is_empty(self.get_value(d[0], d[1]))]
     return filtered_deductions
@@ -323,20 +375,24 @@ class Board:
             has_placeholder = search_has_placeholder
 
         #place the boat
-        if confirmed:
+        if boat_size and confirmed:
+          # print(self)
+          # print(f"Boat found at {row}, {col} with size {boat_size} and direction {boat_direction}")
+          # print(f"Left boats: {self.left_boats}")
+
           #if there is placeholders in the boat, resolve them
           if has_placeholder:
             self.place_boat(row, col, boat_size, boat_direction)
 
           #remove the boat size from the list of left boats
           self.left_boats = np.delete(self.left_boats, np.where(self.left_boats == boat_size)[0][0])
-          
-          #mark the board cords as visited
-          for i in range(boat_size):
-            if boat_direction == "right":
-              skip.append((row, col+i))
-            elif boat_direction == "bottom":
-              skip.append((row+i, col))         
+
+        #mark the board cords as visited
+        for i in range(boat_size+1): #+1 because it's the margin where we can't place boats
+          if boat_direction == "right":
+            skip.append((row, col+i))
+          elif boat_direction == "bottom":
+            skip.append((row+i, col))         
 
   def place_boat(self, row, col, size, direction):
     if size == 1:
@@ -406,16 +462,25 @@ class Board:
           has_placeholder = True
         boat_size += 1
 
-    #update confirmation on edge case
-    if boat_size == 1:
-      #get surrounding of the search position
-      vv = self.adjacent_vertical_values(row, col)
-      hv = self.adjacent_horizontal_values(row, col)
 
+    #get surrounding of the search position
+    vv = self.adjacent_vertical_values(row, col)
+    hv = self.adjacent_horizontal_values(row, col)
+
+    #confirmation edge cases
+    if boat_size == 1:
       if not (is_water(vv[0]) or is_border(vv[0])) or not (is_water(vv[1]) or is_border(vv[1]))\
           or not (is_water(hv[0]) or is_border(hv[0])) or not (is_water(hv[1]) or is_border(hv[1])):
         confirmed = False
 
+    # if direction == "bottom" and boat_size != 4 and is_empty(vv[0]):
+    #   confirmed = False
+    
+    # if direction == "right" and boat_size != 4 and is_empty(hv[0]):
+    #   confirmed = False
+
+
+    
     return boat_size, confirmed, has_placeholder
 
 
@@ -518,8 +583,11 @@ if __name__ == "__main__":
   goal_node: Node = depth_first_tree_search(problem)
 
   if goal_node:
-    print("SOLVED")
-    print(goal_node.state.board)
+    for row in goal_node.state.board.state:
+      for col in row:
+        print(col, end="")
+      print()
+    # print(goal_node.state.board)
   
   # for row in board.state:
   #   for col in row:
