@@ -60,13 +60,10 @@ class Board:
     self.state = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
     self.boat_pieces = []
     self.left_boats =[4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
-    self.current_boats = []
-    self.skip_coords = []
+    self.current_boats = set()
+    self.skip_coords = set()
 
-  def clean_board(self):
-    #clean non empty rows/cols
-    self.apply_targets()
-
+  def run_deductions(self):
     for piece in self.boat_pieces:
       row, col, obj = piece
       deductions = self.get_deductions(int(row), int(col), obj)
@@ -347,14 +344,14 @@ class Board:
         self.place(row+2, col, MIDDLE)
         self.place(row+3, col, BOTTOM)
 
-    self.current_boats.append((row, col, size, direction))
+    self.current_boats.add((row, col, size, direction))
 
     #add coords to skip
     for i in range(size):
       if direction == "right":
-        self.skip_coords.append((row, col+i))
+        self.skip_coords.add((row, col+i))
       elif direction == "bottom":
-        self.skip_coords.append((row+i, col))
+        self.skip_coords.add((row+i, col))
 
   def search_boats(self, size=None):
     if len(self.left_boats) == 0 or (size and size not in self.left_boats):
@@ -606,16 +603,18 @@ class Board:
         row, col, boat_size, direction, empty_blocks, placeholder_blocks = boat
         if empty_blocks == 0 and placeholder_blocks == 0:
           board_instance.left_boats.remove(boat_size)
-          board_instance.current_boats.append((row, col, boat_size, direction))
+          board_instance.current_boats.add((row, col, boat_size, direction))
 
           #add coords to skip
           for i in range(size):
             if direction == "right":
-              board_instance.skip_coords.append((row, col+i))
+              board_instance.skip_coords.add((row, col+i))
             elif direction == "bottom":
-              board_instance.skip_coords.append((row+i, col))
+              board_instance.skip_coords.add((row+i, col))
 
-    board_instance.clean_board()
+    board_instance.apply_targets()
+    board_instance.run_deductions()
+    
     return board_instance
 
 
@@ -626,8 +625,13 @@ class Bimaru(Problem):
       super().__init__(self.state)
 
     def actions(self, state: BimaruState):
-      if len(state.board.left_boats) == 0 or -1 in state.board.rows_target or -1 in state.board.cols_target: #invalid state
+      if len(state.board.left_boats) == 0:
         return []
+      
+      #invalidate 
+      for i in range(BOARD_SIZE):
+        if state.board.rows_target[i] < 0 or state.board.cols_target[i] < 0:
+          return []
 
       max_boat_size = state.board.left_boats[0]
       found_boats = state.board.search_boats(size=max_boat_size)
@@ -645,8 +649,6 @@ class Bimaru(Problem):
       #sort actions based on the amount of placeholders
       actions.sort(key=lambda x: ((x[2]-x[4]), x[5]), reverse=True)
       return actions
-      
-
 
     def result(self, state: BimaruState, action):
       
@@ -654,11 +656,10 @@ class Bimaru(Problem):
 
       row, col, boat_size, direction, _, _ = action
       new_board.place_boat(row, col, boat_size, direction)
-      new_board.clean_board()
+      new_board.apply_targets()
 
       new_state = BimaruState(new_board)
       return new_state
-
 
     def goal_test(self, state: BimaruState):
       return len(state.board.left_boats) == 0
