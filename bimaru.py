@@ -2,13 +2,12 @@
 # Devem alterar as classes e funções neste ficheiro de acordo com as instruções do enunciado.
 # Além das funções e classes já definidas, podem acrescentar outras que considerem pertinentes.
 
-# Grupo 00:
-# 00000 Nome1
-# 00000 Nome2
+# Grupo 84:
+# 102843 Joao Melo
+# 103597 Andre Santos
 
 #import sys
 from sys import stdin
-import copy
 
 from search import (
     Problem,
@@ -47,7 +46,6 @@ is_border = lambda x: x == None
 is_placeholder = lambda x: x == PLACEHOLDER
 
 is_piece = lambda x: not (is_water(x) or is_border(x) or is_empty(x))
-
 
 class BimaruState:
   state_id = 0
@@ -142,7 +140,7 @@ class Board:
 
     return None
   
-  def adjacent_vertical_values(self, row: int, col: int) -> (str, str):
+  def adjacent_vertical_values(self, row: int, col: int):
     """Devolve os valores imediatamente acima e abaixo,
     respectivamente."""
     top = self.get_value(row-1, col)
@@ -150,7 +148,7 @@ class Board:
 
     return (top, bottom)
 
-  def adjacent_horizontal_values(self, row: int, col: int) -> (str, str):
+  def adjacent_horizontal_values(self, row: int, col: int):
     """Devolve os valores imediatamente à esquerda e à direita,
     respectivamente."""
     left = self.get_value(row, col-1)
@@ -297,134 +295,11 @@ class Board:
     filtered_deductions = [d for d in deductions if is_empty(self.get_value(d[0], d[1]))]
     return filtered_deductions
 
-  def can_be_circle(self, row, col):
-    obj = self.get_value(row, col)
-
-    #if it's already a circle piece
-    if is_circle(obj):
-      return True
-
-    if not (is_empty(obj) or is_placeholder(obj)):
-      return False
-
-    offsets = [(1,0), (-1, 0), (0,-1), (0,1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
-
-    for r, c in offsets:
-      n_row, n_col = row + r , col + c
-      if is_piece(self.get_value(n_row, n_col)):
-        return False
-
-    return True
-
-  def can_be_bottom(self, row, col):
-    obj = self.get_value(row, col)
-    
-    #if it's already a bottom piece
-    if is_bottom(obj):
-      return True
-
-    if not (is_empty(obj) or is_placeholder(obj)):
-      return False
-
-    #bottom, bottom-left, bottom-right, left, right, top-left, top-right
-    offsets = [(1,0), (1, -1), (1, 1), (0, -1), (0, 1), (-1, -1), (-1, 1)]
-
-    for r, c in offsets:
-      n_row, n_col = row + r , col + c
-      if is_piece(self.get_value(n_row, n_col)):
-        return False
-
-    return True
-  
-  def can_be_top(self, row, col):
-    obj = self.get_value(row, col)
-
-    #if it's already a top piece
-    if is_top(obj):
-      return True
-
-    if not (is_empty(obj) or is_placeholder(obj)):
-      return False
-
-    #top, top-left, top-right, left, right, bottom-left, bottom-right
-    offsets = [(-1,0), (-1, -1), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 1)]
-
-    for r, c in offsets:
-      n_row, n_col = row + r , col + c
-      if is_piece(self.get_value(n_row, n_col)):
-        return False
-      
-    return True
-  
-  def can_be_left(self, row, col):
-    obj = self.get_value(row, col)
-
-    #if it's already a left piece
-    if is_left(obj):
-      return True
-
-    if not (is_empty(obj) or is_placeholder(obj)):
-      return False
-
-    #left, top-left, bottom-left, top, bottom, top-right, bottom-right
-    offsets = [(0,-1), (-1, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (1, 1)]
-
-    for r, c in offsets:
-      n_row, n_col = row + r , col + c
-      if is_piece(self.get_value(n_row, n_col)):
-        return False
-      
-    return True
-  
-  def can_be_right(self, row, col):
-    obj = self.get_value(row, col)
-
-    #if it's already a right piece
-    if is_right(obj):
-      return True
-
-    if not (is_empty(obj) or is_placeholder(obj)):
-      return False
-
-    #right, top-right, bottom-right, top, bottom, top-left, bottom-left
-    offsets = [(0,1), (-1, 1), (1, 1), (-1, 0), (1, 0), (-1, -1), (1, -1)]
-
-    for r, c in offsets:
-      n_row, n_col = row + r , col + c
-      if is_piece(self.get_value(n_row, n_col)):
-        return False
-      
-    return True
-  
-  def can_be_middle(self, row, col):
-    obj = self.get_value(row, col)
-
-    #if it's already a middle piece
-    if is_middle(obj):
-      return True
-    
-    if not (is_empty(obj) or is_placeholder(obj)):
-      return False
-    
-    #top-left, top-right, bottom-left, bottom-right
-    offsets = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
-
-    for r, c in offsets:
-      n_row, n_col = row + r , col + c
-      if is_piece(self.get_value(n_row, n_col)):
-        return False
-      
-    return True
-
   def validate_boat(self, row, col, boat_size, direction, empty_blocks, placeholder_blocks):
     valid = True
 
     if boat_size == 0:
       return False
-
-    #if confirmed boat
-    if placeholder_blocks == boat_size:
-      return True
 
     #if there are more empty blocks than the target
     if direction == "bottom":
@@ -446,28 +321,28 @@ class Board:
 
     #confirmation edge cases
     if boat_size == 1:
-      valid = self.can_be_circle(row, col)
+      valid = self.is_one_boat(row, col)
 
     if boat_size == 2:
       if direction == "bottom":
-        valid = self.can_be_top(row, col) and self.can_be_bottom(row+1,col)
+        valid = self.is_two_boat_bottom(row, col)
 
       elif direction == "right":
-        valid = self.can_be_left(row, col) and self.can_be_right(row, col+1)
+        valid = self.is_two_boat_right(row, col)
 
     if boat_size == 3:
       if direction == "bottom":
-        valid = self.can_be_top(row, col) and self.can_be_middle(row+1,col) and self.can_be_bottom(row+2,col)
+        valid = self.is_three_boat_bottom(row, col)
 
       if direction == "right":
-        valid = self.can_be_left(row, col) and self.can_be_middle(row, col +1) and self.can_be_right(row, col+2)
+        valid = self.is_three_boat_right(row, col)
 
     if boat_size == 4:
       if direction == "bottom":
-        valid = self.can_be_top(row, col) and self.can_be_middle(row+1,col) and self.can_be_middle(row+2,col) and self.can_be_bottom(row+3,col)
+        valid = self.is_four_boat_bottom(row, col)
 
       if direction == "right":
-        valid = self.can_be_left(row, col) and self.can_be_middle(row, col+1) and self.can_be_middle(row, col+2) and self.can_be_right(row, col+3)
+        valid = self.is_four_boat_right(row, col)
       
     return valid
 
@@ -485,8 +360,6 @@ class Board:
     if size not in self.left_boats:
       return
     
-    # print(self)
-    # print(f"Placing boat of size {size} at {row}, {col}, direction: {direction}")
     self.left_boats.remove(size)
 
     if size == 1:
@@ -574,32 +447,36 @@ class Board:
           #if we are searching for 1 size boats, we can stop here
           if max_boat_size == 1:
             break
-          #   print(f"Valid boat at {row}, {col}, size: {boat_size}, direction: {direction}")
-          # else:
-          #   print(f"Invalid boat at {row}, {col}, size: {boat_size}, direction: {direction}")
-
-        #add the rows/cols to the skip
-        # for i in range(biggest_boat[2]+1): #+1 because it's the margin where we can't place boats
-        #   if biggest_boat[3] == "right":
-        #     skip.append((row, col+i))
-        #   elif biggest_boat[3] == "bottom":
-        #     skip.append((row+i, col))
     
     return boats
 
-  def is_one_boat(self, row, col):
+  def is_one_boat(self, row, col, gt=False):
+    v = self.get_value(row, col)
+    
+    if gt and not is_circle(v):
+      return False
+    
+    if not (is_circle(v) or is_empty(v) or is_placeholder(v)):
+      return False
+
     offset = [(-1,-1), (-1,0), (-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]
     for i, j in offset:
       if is_piece(self.get_value(row+i, col+j)):
         return False
 
-    return is_circle(self.get_value(row, col))
+    return True
 
-  def is_two_boat_right(self, row, col):
-    if not is_left(self.get_value(row, col)):
+  def is_two_boat_right(self, row, col, gt=False):
+    v1 = self.get_value(row, col)
+    v2 = self.get_value(row, col+1)
+
+    if gt and not is_left(v1):
       return False
 
-    if not is_right(self.get_value(row, col+1)):
+    if gt and not is_right(v2):
+      return False
+
+    if not (is_left(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_right(v2) or is_empty(v2) or is_placeholder(v2)):
       return False
 
     offset = [(-1,-1), (-1,0), (-1,1), (-1,2),
@@ -611,11 +488,17 @@ class Board:
     
     return True
 
-  def is_two_boat_bottom(self, row, col):
-    if not is_top(self.get_value(row, col)):
+  def is_two_boat_bottom(self, row, col, gt=False):
+    v1 = self.get_value(row, col)
+    v2 = self.get_value(row+1, col)
+
+    if gt and not is_top(v1):
       return False
 
-    if not is_bottom(self.get_value(row+1, col)):
+    if gt and not is_bottom(v2):
+      return False
+    
+    if not (is_top(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_bottom(v2) or is_empty(v2) or is_placeholder(v2)):
       return False
 
     offset = [(-1,-1), (-1,0), (-1,1),
@@ -628,14 +511,21 @@ class Board:
     
     return True
 
-  def is_three_boat_right(self, row, col):
-    if not is_left(self.get_value(row, col)):
+  def is_three_boat_right(self, row, col, gt=False):
+    v1 = self.get_value(row, col)
+    v2 = self.get_value(row, col+1)
+    v3 = self.get_value(row, col+2)
+
+    if gt and not is_left(v1):
       return False
 
-    if not is_middle(self.get_value(row, col+1)):
+    if gt and not is_middle(v2):
       return False
 
-    if not is_right(self.get_value(row, col+2)):
+    if gt and not is_right(v3):
+      return False
+      
+    if not (is_left(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_right(v3) or is_empty(v3) or is_placeholder(v3)):
       return False
 
     offset = [(-1,-1), (-1,0), (-1,1), (-1,2), (-1,3),
@@ -647,14 +537,21 @@ class Board:
     
     return True
 
-  def is_three_boat_bottom(self, row, col):
-    if not is_top(self.get_value(row, col)):
+  def is_three_boat_bottom(self, row, col, gt=False):
+    v1 = self.get_value(row, col)
+    v2 = self.get_value(row+1, col)
+    v3 = self.get_value(row+2, col)
+
+    if gt and not is_top(v1):
       return False
 
-    if not is_middle(self.get_value(row+1, col)):
+    if gt and not is_middle(v2):
       return False
 
-    if not is_bottom(self.get_value(row+2, col)):
+    if gt and not is_bottom(v3):
+      return False
+    
+    if not (is_top(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_bottom(v3) or is_empty(v3) or is_placeholder(v3)):
       return False
 
     offset = [(-1,-1), (-1,0), (-1,1),
@@ -668,17 +565,25 @@ class Board:
     
     return True
 
-  def is_four_boat_right(self, row, col):
-    if not is_left(self.get_value(row, col)):
+  def is_four_boat_right(self, row, col, gt=False):
+    v1 = self.get_value(row, col)
+    v2 = self.get_value(row, col+1)
+    v3 = self.get_value(row, col+2)
+    v4 = self.get_value(row, col+3)
+
+    if gt and not is_left(v1):
       return False
 
-    if not is_middle(self.get_value(row, col+1)):
+    if gt and not is_middle(v2):
       return False
 
-    if not is_middle(self.get_value(row, col+2)):
+    if gt and not is_middle(v3):
       return False
 
-    if not is_right(self.get_value(row, col+3)):
+    if gt and not is_right(v4):
+      return False
+    
+    if not (is_left(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_middle(v3) or is_empty(v3) or is_placeholder(v3)) or not (is_right(v4) or is_empty(v4) or is_placeholder(v4)):
       return False
 
     offset = [(-1,-1), (-1,0), (-1,1), (-1,2), (-1,3), (-1,4),
@@ -690,17 +595,25 @@ class Board:
     
     return True
 
-  def is_four_boat_bottom(self, row, col):
-    if not is_top(self.get_value(row, col)):
+  def is_four_boat_bottom(self, row, col, gt=False):
+    v1 = self.get_value(row, col)
+    v2 = self.get_value(row+1, col)
+    v3 = self.get_value(row+2, col)
+    v4 = self.get_value(row+3, col)
+      
+    if gt and not is_top(v1):
       return False
 
-    if not is_middle(self.get_value(row+1, col)):
+    if gt and not is_middle(v2):
       return False
 
-    if not is_middle(self.get_value(row+2, col)):
+    if gt and not is_middle(v3):
       return False
 
-    if not is_bottom(self.get_value(row+3, col)):
+    if gt and not is_bottom(v4):
+      return False
+    
+    if not (is_top(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_middle(v3) or is_empty(v3) or is_placeholder(v3)) or not (is_bottom(v4) or is_empty(v4) or is_placeholder(v4)):
       return False
 
     offset = [(-1,-1), (-1,0), (-1,1),
@@ -716,7 +629,7 @@ class Board:
     return True
 
 
-  def __str__(self):
+  def beauty_print(self):
     max_len = max(len(str(val)) for row in self.state for val in row)
 
     row_str = ""
@@ -739,12 +652,22 @@ class Board:
 
     return matrix_str
 
+  def print_board(self):
+    """Imprime o tabuleiro no standard output (stdout)."""
+    for row in range(BOARD_SIZE):
+      for col in range(BOARD_SIZE):
+        if self.get_value(row, col) is None:
+          print('!', end='')
+        else:
+          print(self.get_value(row, col), end='')
+      print()
+
   def board_copy(self):
     """Retorna uma cópia do tabuleiro atual."""
     board_copy = Board()
     board_copy.rows_target = self.rows_target.copy()
     board_copy.cols_target = self.cols_target.copy()
-    board_copy.state = copy.deepcopy(self.state)
+    board_copy.state = [[self.state[row][col] for col in range(BOARD_SIZE)] for row in range(BOARD_SIZE)]
     board_copy.boat_pieces = self.boat_pieces.copy()
     board_copy.left_boats = self.left_boats.copy()
     board_copy.current_boats = self.current_boats.copy()
@@ -770,17 +693,20 @@ class Board:
       board_instance.place(int(row), int(col), obj)
 
     #check what boats are already complete
+    # print(board_instance)
     for size in range(4, 0, -1):
       f = board_instance.search_boats(size=size)
       
-      # print(board_instance)
       for boat in f:
         row, col, boat_size, direction, empty_blocks, placeholder_blocks = boat
         if empty_blocks == 0 and placeholder_blocks == 0:
           # print(boat)
           # print(board_instance.left_boats, boat_size)
           # print("")
+
           board_instance.left_boats.remove(boat_size)
+
+    board_instance.clean_board()
 
     return board_instance
 
@@ -817,7 +743,7 @@ class Bimaru(Problem):
         actions.append(boat)
 
       #sort actions based on the amount of placeholders
-      actions.sort(key=lambda x: x[5], reverse=True)
+      #actions.sort(key=lambda x: x[5], reverse=True)
       # print("GENERATED ACTIONS:")
       # print("actions: ", actions)
       return actions
@@ -847,55 +773,50 @@ class Bimaru(Problem):
         if state.board.cols_target[i] != 0 or state.board.rows_target[i] != 0:
           return False
 
-      for boat in state.board.current_boats:
-        row, col, boat_size, direction = boat
+      # for boat in state.board.current_boats:
+      #   row, col, boat_size, direction = boat
 
-        if boat_size == 1:
-          if not state.board.is_one_boat(row, col):
-            return False
+      #   if boat_size == 1:
+      #     if not state.board.is_one_boat(row, col, True):
+      #       return False
 
-        elif boat_size == 2:
-          if direction == "right":
-            if not state.board.is_two_boat_right(row, col):
-              return False
-          else:
-            if not state.board.is_two_boat_bottom(row, col):
-              return False
+      #   elif boat_size == 2:
+      #     if direction == "right":
+      #       if not state.board.is_two_boat_right(row, col, True):
+      #         return False
+      #     else:
+      #       if not state.board.is_two_boat_bottom(row, col, True):
+      #         return False
 
-        elif boat_size == 3:
-          if direction == "right":
-            if not state.board.is_three_boat_right(row, col):
-              return False
-          else:
-            if not state.board.is_three_boat_bottom(row, col):
-              return False
+      #   elif boat_size == 3:
+      #     if direction == "right":
+      #       if not state.board.is_three_boat_right(row, col, True):
+      #         return False
+      #     else:
+      #       if not state.board.is_three_boat_bottom(row, col, True):
+      #         return False
 
-        elif boat_size == 4:
-          if direction == "right":
-            if not state.board.is_four_boat_right(row, col):
-              return False
-          else:
-            if not state.board.is_four_boat_bottom(row, col):
-              return False
+      #   elif boat_size == 4:
+      #     if direction == "right":
+      #       if not state.board.is_four_boat_right(row, col, True):
+      #         return False
+      #     else:
+      #       if not state.board.is_four_boat_bottom(row, col, True):
+      #         return False
         
       return True
 
     def h(self, node: Node):
-      """Função heuristica utilizada para a procura A*."""
-      # TODO
-      pass
+      return -node.depth*2
 
     # TODO: outros metodos da classe
 
 
 if __name__ == "__main__":
-  
   board = Board.parse_instance()
   # print("Initial board:")
   # print(board)
-  
-  board.clean_board()
-  
+    
   problem = Bimaru(board)
 
   # Criar um estado com a configuração inicial:
@@ -918,12 +839,8 @@ if __name__ == "__main__":
 
   goal_node: Node = depth_first_tree_search(problem)
 
-  if goal_node:
-    # print(goal_node.state.board)
-    for row in goal_node.state.board.state:
-      for col in row:
-        print(col, end="")
-      print()
+  goal_node.state.board.print_board()
+
   
   # for row in board.state:
   #   for col in row:
