@@ -6,17 +6,11 @@
 # 102843 Joao Melo
 # 103597 Andre Santos
 
-#import sys
 from sys import stdin
-
 from search import (
     Problem,
     Node,
-    astar_search,
-    breadth_first_tree_search,
     depth_first_tree_search,
-    greedy_search,
-    recursive_best_first_search,
 )
 
 #consts
@@ -59,21 +53,28 @@ class BimaruState:
     return self.id < other.id
 
 class Board:  
+  def __init__(self, rows_target, cols_target):
+    self.rows_target = rows_target
+    self.cols_target = cols_target
+
+    self.state = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+    self.boat_pieces = []
+    self.left_boats =[4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
+    self.current_boats = []
+    self.skip_coords = []
+
   def clean_board(self):
     #clean non empty rows/cols
     self.apply_targets()
 
     for piece in self.boat_pieces:
       row, col, obj = piece
-      deductions = self.get_deductions(row, col, obj)
+      deductions = self.get_deductions(int(row), int(col), obj)
 
       #apply deductions
       for drow, dcol, dobj in deductions:
         self.place(drow, dcol, dobj)
 
-    #when the board is clean we can resolve the boats
-    # self.resolve_boats()
-      
   def place(self, row, col, obj):
     row, col = int(row), int(col)
     current_obj = self.get_value(row, col)
@@ -133,14 +134,14 @@ class Board:
       if is_empty(self.get_value(new_row, new_col)):
         self.place(new_row, new_col, WATER)
 
-  def get_value(self, row: int, col: int) -> str | None:
+  def get_value(self, row, col):
     """Devolve o valor na respetiva posição do tabuleiro."""
     if 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE:
       return self.state[row][col]
 
     return None
   
-  def adjacent_vertical_values(self, row: int, col: int):
+  def adjacent_vertical_values(self, row, col):
     """Devolve os valores imediatamente acima e abaixo,
     respectivamente."""
     top = self.get_value(row-1, col)
@@ -148,7 +149,7 @@ class Board:
 
     return (top, bottom)
 
-  def adjacent_horizontal_values(self, row: int, col: int):
+  def adjacent_horizontal_values(self, row, col):
     """Devolve os valores imediatamente à esquerda e à direita,
     respectivamente."""
     left = self.get_value(row, col-1)
@@ -162,43 +163,6 @@ class Board:
     (top, left, right, bottom)
     '''
     return (row, col, BOARD_SIZE-1-col , BOARD_SIZE-1-row)
-
-  def distance_to_piece(self, row, col):
-    '''
-    returns the distance to closest non-empty piece
-    (top, left, right, bottom)
-    '''
-    #find to the left
-    topd = 0
-    leftd = 0
-    rightd = 0
-    bottomd = 0
-
-    #count top distance
-    for i in range(row-1, -1, -1):
-      if not is_empty(self.get_value(i, col)):
-        break
-      topd+= 1
-
-    #count left distance
-    for i in range(col-1, -1, -1):
-      if not is_empty(self.get_value(row, i)):
-        break
-      leftd+= 1
-
-    #count right distance
-    for i in range(col+1, BOARD_SIZE):
-      if not is_empty(self.get_value(row, i)):
-        break
-      rightd+= 1
-
-    #count bottom distance
-    for i in range(row+1, BOARD_SIZE):
-      if not is_empty(self.get_value(i, col)):
-        break
-      bottomd+= 1
-    
-    return (topd, leftd, rightd, bottomd)
 
   def clean_row(self, row):
     for col in range(BOARD_SIZE):
@@ -259,9 +223,6 @@ class Board:
     top_d, left_d, right_d, bottom_d = self.distance_to_boundaries(row, col)
     left_obj, right_obj = self.adjacent_horizontal_values(row, col)
     top_obj, bottom_obj = self.adjacent_vertical_values(row, col)
-
-    #relative distance to the closest piece
-    #top_rd, left_rd, right_rd, bottom_rd = self.distance_to_piece(row, col)
 
     if is_right(obj): 
       deductions.append((row, col-1, PLACEHOLDER))
@@ -346,15 +307,6 @@ class Board:
       
     return valid
 
-  def resolve_boats(self):
-    found_boats = self.search_boats()
-
-    for boat in found_boats:
-      row, col, size, direction, empty_blocks, placeholder_blocks = boat
-      
-      if empty_blocks == 0 and placeholder_blocks != 0: #is an already confirmed boat
-        self.place_boat(row, col, size, direction)
-
   def place_boat(self, row, col, size, direction):
     #remove boat size from boats_left
     if size not in self.left_boats:
@@ -397,8 +349,15 @@ class Board:
 
     self.current_boats.append((row, col, size, direction))
 
+    #add coords to skip
+    for i in range(size):
+      if direction == "right":
+        self.skip_coords.append((row, col+i))
+      elif direction == "bottom":
+        self.skip_coords.append((row+i, col))
+
   def search_boats(self, size=None):
-    if len(self.left_boats) == 0:
+    if len(self.left_boats) == 0 or (size and size not in self.left_boats):
       return []
     
     boats = []
@@ -406,8 +365,10 @@ class Board:
 
     for row in range(BOARD_SIZE):
       for col in range(BOARD_SIZE):
-        # if self.rows_target[row] == 0 or self.cols_target[col] == 0:
-        #   continue
+
+        #skip if coord is already used
+        if (row, col) in self.skip_coords:
+          continue
 
         for direction in ["right", "bottom"]: 
           boat_size = 0
@@ -450,11 +411,8 @@ class Board:
     
     return boats
 
-  def is_one_boat(self, row, col, gt=False):
+  def is_one_boat(self, row, col):
     v = self.get_value(row, col)
-    
-    if gt and not is_circle(v):
-      return False
     
     if not (is_circle(v) or is_empty(v) or is_placeholder(v)):
       return False
@@ -469,12 +427,6 @@ class Board:
   def is_two_boat_right(self, row, col, gt=False):
     v1 = self.get_value(row, col)
     v2 = self.get_value(row, col+1)
-
-    if gt and not is_left(v1):
-      return False
-
-    if gt and not is_right(v2):
-      return False
 
     if not (is_left(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_right(v2) or is_empty(v2) or is_placeholder(v2)):
       return False
@@ -492,12 +444,6 @@ class Board:
     v1 = self.get_value(row, col)
     v2 = self.get_value(row+1, col)
 
-    if gt and not is_top(v1):
-      return False
-
-    if gt and not is_bottom(v2):
-      return False
-    
     if not (is_top(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_bottom(v2) or is_empty(v2) or is_placeholder(v2)):
       return False
 
@@ -516,15 +462,6 @@ class Board:
     v2 = self.get_value(row, col+1)
     v3 = self.get_value(row, col+2)
 
-    if gt and not is_left(v1):
-      return False
-
-    if gt and not is_middle(v2):
-      return False
-
-    if gt and not is_right(v3):
-      return False
-      
     if not (is_left(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_right(v3) or is_empty(v3) or is_placeholder(v3)):
       return False
 
@@ -542,15 +479,6 @@ class Board:
     v2 = self.get_value(row+1, col)
     v3 = self.get_value(row+2, col)
 
-    if gt and not is_top(v1):
-      return False
-
-    if gt and not is_middle(v2):
-      return False
-
-    if gt and not is_bottom(v3):
-      return False
-    
     if not (is_top(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_bottom(v3) or is_empty(v3) or is_placeholder(v3)):
       return False
 
@@ -570,18 +498,6 @@ class Board:
     v2 = self.get_value(row, col+1)
     v3 = self.get_value(row, col+2)
     v4 = self.get_value(row, col+3)
-
-    if gt and not is_left(v1):
-      return False
-
-    if gt and not is_middle(v2):
-      return False
-
-    if gt and not is_middle(v3):
-      return False
-
-    if gt and not is_right(v4):
-      return False
     
     if not (is_left(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_middle(v3) or is_empty(v3) or is_placeholder(v3)) or not (is_right(v4) or is_empty(v4) or is_placeholder(v4)):
       return False
@@ -600,18 +516,6 @@ class Board:
     v2 = self.get_value(row+1, col)
     v3 = self.get_value(row+2, col)
     v4 = self.get_value(row+3, col)
-      
-    if gt and not is_top(v1):
-      return False
-
-    if gt and not is_middle(v2):
-      return False
-
-    if gt and not is_middle(v3):
-      return False
-
-    if gt and not is_bottom(v4):
-      return False
     
     if not (is_top(v1) or is_empty(v1) or is_placeholder(v1)) or not (is_middle(v2) or is_empty(v2) or is_placeholder(v2)) or not (is_middle(v3) or is_empty(v3) or is_placeholder(v3)) or not (is_bottom(v4) or is_empty(v4) or is_placeholder(v4)):
       return False
@@ -664,13 +568,17 @@ class Board:
 
   def board_copy(self):
     """Retorna uma cópia do tabuleiro atual."""
-    board_copy = Board()
-    board_copy.rows_target = self.rows_target.copy()
-    board_copy.cols_target = self.cols_target.copy()
+    rows_target = self.rows_target.copy()
+    cols_target = self.cols_target.copy()
+
+    board_copy = Board(rows_target, cols_target)
+
     board_copy.state = [[self.state[row][col] for col in range(BOARD_SIZE)] for row in range(BOARD_SIZE)]
     board_copy.boat_pieces = self.boat_pieces.copy()
     board_copy.left_boats = self.left_boats.copy()
     board_copy.current_boats = self.current_boats.copy()
+    board_copy.skip_coords = self.skip_coords.copy()
+
     return board_copy
   
   @staticmethod
@@ -678,63 +586,55 @@ class Board:
     """Lê o test do standard input (stdin) que é passado como argumento
     e retorna uma instância da classe Board.
     """
-    board_instance = Board()
-    board_instance.rows_target = list(map(int, stdin.readline().split()[1:]))
-    board_instance.cols_target = list(map(int, stdin.readline().split()[1:]))
-    board_instance.state = [[EMPTY for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
-    board_instance.boat_pieces = []
-    board_instance.left_boats =[4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
-    board_instance.updated = False
-    board_instance.current_boats = []
+    rows_target = list(map(int, stdin.readline().split()[1:]))
+    cols_target = list(map(int, stdin.readline().split()[1:]))
+
+    board_instance = Board(rows_target, cols_target)
 
     #build the initial board
+    pieces_placed = 0
     for _ in range(int(stdin.readline())):
       row, col, obj = stdin.readline().split()[1:]
       board_instance.place(int(row), int(col), obj)
+      pieces_placed += 1
 
     #check what boats are already complete
-    # print(board_instance)
-    for size in range(4, 0, -1):
+    for size in range(min(4, pieces_placed), 0, -1):
       f = board_instance.search_boats(size=size)
       
       for boat in f:
         row, col, boat_size, direction, empty_blocks, placeholder_blocks = boat
         if empty_blocks == 0 and placeholder_blocks == 0:
-          # print(boat)
-          # print(board_instance.left_boats, boat_size)
-          # print("")
-
           board_instance.left_boats.remove(boat_size)
+          board_instance.current_boats.append((row, col, boat_size, direction))
+
+          #add coords to skip
+          for i in range(size):
+            if direction == "right":
+              board_instance.skip_coords.append((row, col+i))
+            elif direction == "bottom":
+              board_instance.skip_coords.append((row+i, col))
 
     board_instance.clean_board()
-
     return board_instance
 
 
 class Bimaru(Problem):
     def __init__(self, board: Board):
       """O construtor especifica o estado inicial."""
-      super().__init__(BimaruState(board))
+      self.state = BimaruState(board)
+      super().__init__(self.state)
 
     def actions(self, state: BimaruState):
-      if len(state.board.left_boats) == 0 or -1 in state.board.rows_target or -1 in state.board.cols_target:
+      if len(state.board.left_boats) == 0 or -1 in state.board.rows_target or -1 in state.board.cols_target: #invalid state
         return []
-      
-      # print(f"\n\nTHIS BOARD HAS {len(state.board.left_boats)} BOATS LEFT")
-      # print(state.board.left_boats)
-
-      # print(state.board)
 
       max_boat_size = state.board.left_boats[0]
-      found_boats = state.board.search_boats()
+      found_boats = state.board.search_boats(size=max_boat_size)
 
       actions = []
       for boat in found_boats:
         _, _, boat_size, _, empty_blocks, placeholder_blocks = boat
-
-        #ignore small boats
-        if boat_size != max_boat_size :
-          continue
 
         #if the boat is already placed, ignore it
         if empty_blocks == 0 and placeholder_blocks == 0:
@@ -743,9 +643,7 @@ class Bimaru(Problem):
         actions.append(boat)
 
       #sort actions based on the amount of placeholders
-      #actions.sort(key=lambda x: x[5], reverse=True)
-      # print("GENERATED ACTIONS:")
-      # print("actions: ", actions)
+      actions.sort(key=lambda x: ((x[2]-x[4]), x[5]), reverse=True)
       return actions
       
 
@@ -763,86 +661,18 @@ class Bimaru(Problem):
 
 
     def goal_test(self, state: BimaruState):
-      # print("testing goal")
-      for row in state.board.state:
-        for pos in row:
-          if pos == EMPTY or pos == PLACEHOLDER:
-            return False
-      
-      for i in range(BOARD_SIZE):
-        if state.board.cols_target[i] != 0 or state.board.rows_target[i] != 0:
-          return False
-
-      # for boat in state.board.current_boats:
-      #   row, col, boat_size, direction = boat
-
-      #   if boat_size == 1:
-      #     if not state.board.is_one_boat(row, col, True):
-      #       return False
-
-      #   elif boat_size == 2:
-      #     if direction == "right":
-      #       if not state.board.is_two_boat_right(row, col, True):
-      #         return False
-      #     else:
-      #       if not state.board.is_two_boat_bottom(row, col, True):
-      #         return False
-
-      #   elif boat_size == 3:
-      #     if direction == "right":
-      #       if not state.board.is_three_boat_right(row, col, True):
-      #         return False
-      #     else:
-      #       if not state.board.is_three_boat_bottom(row, col, True):
-      #         return False
-
-      #   elif boat_size == 4:
-      #     if direction == "right":
-      #       if not state.board.is_four_boat_right(row, col, True):
-      #         return False
-      #     else:
-      #       if not state.board.is_four_boat_bottom(row, col, True):
-      #         return False
-        
-      return True
+      return len(state.board.left_boats) == 0
 
     def h(self, node: Node):
-      return -node.depth*2
+      return -len(node.state.board.left_boats)
 
-    # TODO: outros metodos da classe
 
 
 if __name__ == "__main__":
-  board = Board.parse_instance()
-  # print("Initial board:")
-  # print(board)
-    
-  problem = Bimaru(board)
+  board: Board = Board.parse_instance()
 
-  # Criar um estado com a configuração inicial:
-  # s0 = BimaruState(board)
-  # Aplicar as ações que resolvem a instância
-
-  # print("S0")
-  # print(s0.board)
-  # print(problem.actions(s0))
-
-  # print("S1")
-  # s1 = problem.result(s0, problem.actions(s0)[0])
-  # print(s1.board)
-  # print(problem.actions(s1))
-
-  # print("S2")
-  # s2 = problem.result(s1, problem.actions(s1)[0])
-  # print(s2.board)
-
+  problem: Problem = Bimaru(board)
 
   goal_node: Node = depth_first_tree_search(problem)
 
   goal_node.state.board.print_board()
-
-  
-  # for row in board.state:
-  #   for col in row:
-  #     print(col, end="")
-  #   print()
