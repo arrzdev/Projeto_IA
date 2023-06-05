@@ -522,6 +522,8 @@ class Board:
         self.place(row+2, col, MIDDLE)
         self.place(row+3, col, BOTTOM)
 
+    self.current_boats.append((row, col, size, direction))
+
   def search_boats(self, size=None):
     if len(self.left_boats) == 0:
       return []
@@ -585,6 +587,134 @@ class Board:
     
     return boats
 
+  def is_one_boat(self, row, col):
+    offset = [(-1,-1), (-1,0), (-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]
+    for i, j in offset:
+      if is_piece(self.get_value(row+i, col+j)):
+        return False
+
+    return is_circle(self.get_value(row, col))
+
+  def is_two_boat_right(self, row, col):
+    if not is_left(self.get_value(row, col)):
+      return False
+
+    if not is_right(self.get_value(row, col+1)):
+      return False
+
+    offset = [(-1,-1), (-1,0), (-1,1), (-1,2),
+              (0,-1),(0,2),
+              (1,-1),(1,0),(1,1), (1,2)]
+    for i, j in offset:
+      if is_piece(self.get_value(row+i, col+j)):
+        return False    
+    
+    return True
+
+  def is_two_boat_bottom(self, row, col):
+    if not is_top(self.get_value(row, col)):
+      return False
+
+    if not is_bottom(self.get_value(row+1, col)):
+      return False
+
+    offset = [(-1,-1), (-1,0), (-1,1),
+              (0,-1),(0,1),
+              (1,-1),(1,1),
+              (2,-1),(2,0),(2,1)]
+    for i, j in offset:
+      if is_piece(self.get_value(row+i, col+j)):
+        return False    
+    
+    return True
+
+  def is_three_boat_right(self, row, col):
+    if not is_left(self.get_value(row, col)):
+      return False
+
+    if not is_middle(self.get_value(row, col+1)):
+      return False
+
+    if not is_right(self.get_value(row, col+2)):
+      return False
+
+    offset = [(-1,-1), (-1,0), (-1,1), (-1,2), (-1,3),
+              (0,-1),(0,3),
+              (1,-1),(1,0),(1,1), (1,2), (1,3)]
+    for i, j in offset:
+      if is_piece(self.get_value(row+i, col+j)):
+        return False    
+    
+    return True
+
+  def is_three_boat_bottom(self, row, col):
+    if not is_top(self.get_value(row, col)):
+      return False
+
+    if not is_middle(self.get_value(row+1, col)):
+      return False
+
+    if not is_bottom(self.get_value(row+2, col)):
+      return False
+
+    offset = [(-1,-1), (-1,0), (-1,1),
+              (0,-1),(0,1),
+              (1,-1),(1,1),
+              (2,-1),(2,1),
+              (3,-1),(3,0),(3,1)]
+    for i, j in offset:
+      if is_piece(self.get_value(row+i, col+j)):
+        return False    
+    
+    return True
+
+  def is_four_boat_right(self, row, col):
+    if not is_left(self.get_value(row, col)):
+      return False
+
+    if not is_middle(self.get_value(row, col+1)):
+      return False
+
+    if not is_middle(self.get_value(row, col+2)):
+      return False
+
+    if not is_right(self.get_value(row, col+3)):
+      return False
+
+    offset = [(-1,-1), (-1,0), (-1,1), (-1,2), (-1,3), (-1,4),
+              (0,-1),(0,4),
+              (1,-1),(1,0),(1,1), (1,2), (1,3), (1,4)]
+    for i, j in offset:
+      if is_piece(self.get_value(row+i, col+j)):
+        return False    
+    
+    return True
+
+  def is_four_boat_bottom(self, row, col):
+    if not is_top(self.get_value(row, col)):
+      return False
+
+    if not is_middle(self.get_value(row+1, col)):
+      return False
+
+    if not is_middle(self.get_value(row+2, col)):
+      return False
+
+    if not is_bottom(self.get_value(row+3, col)):
+      return False
+
+    offset = [(-1,-1), (-1,0), (-1,1),
+              (0,-1),(0,1),
+              (1,-1),(1,1),
+              (2,-1),(2,1),
+              (3,-1),(3,1),
+              (4,-1),(4,0),(4,1)]
+    for i, j in offset:
+      if is_piece(self.get_value(row+i, col+j)):
+        return False    
+    
+    return True
+
 
   def __str__(self):
     max_len = max(len(str(val)) for row in self.state for val in row)
@@ -617,6 +747,7 @@ class Board:
     board_copy.state = copy.deepcopy(self.state)
     board_copy.boat_pieces = self.boat_pieces.copy()
     board_copy.left_boats = self.left_boats.copy()
+    board_copy.current_boats = self.current_boats.copy()
     return board_copy
   
   @staticmethod
@@ -631,6 +762,7 @@ class Board:
     board_instance.boat_pieces = []
     board_instance.left_boats =[4, 3, 3, 2, 2, 2, 1, 1, 1, 1]
     board_instance.updated = False
+    board_instance.current_boats = []
 
     #build the initial board
     for _ in range(int(stdin.readline())):
@@ -714,6 +846,37 @@ class Bimaru(Problem):
       for i in range(BOARD_SIZE):
         if state.board.cols_target[i] != 0 or state.board.rows_target[i] != 0:
           return False
+
+      for boat in state.board.current_boats:
+        row, col, boat_size, direction = boat
+
+        if boat_size == 1:
+          if not state.board.is_one_boat(row, col):
+            return False
+
+        elif boat_size == 2:
+          if direction == "right":
+            if not state.board.is_two_boat_right(row, col):
+              return False
+          else:
+            if not state.board.is_two_boat_bottom(row, col):
+              return False
+
+        elif boat_size == 3:
+          if direction == "right":
+            if not state.board.is_three_boat_right(row, col):
+              return False
+          else:
+            if not state.board.is_three_boat_bottom(row, col):
+              return False
+
+        elif boat_size == 4:
+          if direction == "right":
+            if not state.board.is_four_boat_right(row, col):
+              return False
+          else:
+            if not state.board.is_four_boat_bottom(row, col):
+              return False
         
       return True
 
